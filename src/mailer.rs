@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use lettre::{
     Message,
     SmtpTransport,

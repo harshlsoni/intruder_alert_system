@@ -1,7 +1,8 @@
-$exePath = "..\intruder_alert_system\target\release\security-cam.exe"
-$userId  = (whoami)
+$base   = "..\intruder_alert_system\target\release"
+$userId = (whoami)
 
-$xml = @"
+function Register-SecTask($name, $exe, $eventId) {
+    $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Principals>
@@ -14,25 +15,30 @@ $xml = @"
   <Settings>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <ExecutionTimeLimit>PT1M</ExecutionTimeLimit>
-    <MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>
+    <ExecutionTimeLimit>PT10M</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <Hidden>true</Hidden>
     <Enabled>true</Enabled>
   </Settings>
   <Triggers>
     <EventTrigger>
       <Enabled>true</Enabled>
-      <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="Security"&gt;&lt;Select Path="Security"&gt;*[System[EventID=4625]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
+      <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="Security"&gt;&lt;Select Path="Security"&gt;*[System[EventID=$eventId]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
     </EventTrigger>
   </Triggers>
   <Actions Context="Author">
     <Exec>
-      <Command>$exePath</Command>
-      <WorkingDirectory>..\intruder_alert_system</WorkingDirectory> 
+      <Command>$base\$exe</Command>
+      <WorkingDirectory>..\intruder_alert_system</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>
 "@
+    $xml | Out-File "$env:TEMP\$name.xml" -Encoding Unicode
+    schtasks /create /tn $name /xml "$env:TEMP\$name.xml" /f
+    Write-Host "$name registered!" -ForegroundColor Green
+}
 
-$xml | Out-File "$env:TEMP\intruder_alert_system.xml" -Encoding Unicode
-schtasks /create /tn "intruder_alert_system" /xml "$env:TEMP\intruder_alert_system.xml" /f
-Write-Host "Done!" -ForegroundColor Green
+Register-SecTask "Intruder_alert_system-Warm"    "warm.exe"    "4800"
+Register-SecTask "intruder_alert_system-Capture" "capture.exe" "4625"
+Register-SecTask "intruder_alert_system-Release" "release.exe" "4801"

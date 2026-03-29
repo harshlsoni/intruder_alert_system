@@ -3,12 +3,23 @@ name    = "intruder_alert_system"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "warm"
+path = "src/warm.rs"
+
+[[bin]]
+name = "capture"
+path = "src/capture.rs"
+
+[[bin]]
+name = "release"
+path = "src/release.rs"
+
 [dependencies]
-nokhwa  = { version = "0.10", features = ["input-native"] }
-image   = { version = "0.24", features = ["png", "jpeg"] }
+escapi  = "4.0.0"
+image   = { version = "0.24", features = ["jpeg"] }
 lettre  = { version = "0.11", features = ["smtp-transport", "builder"] }
 chrono  = "0.4"
-escapi  = "4.0.0"
 
 [profile.release]
 opt-level = 3
