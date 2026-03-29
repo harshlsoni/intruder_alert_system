@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
