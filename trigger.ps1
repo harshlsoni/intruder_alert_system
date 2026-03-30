@@ -1,4 +1,4 @@
-$base   = "..\intruder_alert_system\target\release"
+$base   = "intruder_alert_system\target\release"
 $userId = (whoami)
 
 function Register-SecTask($name, $exe, $eventId) {
@@ -24,6 +24,10 @@ function Register-SecTask($name, $exe, $eventId) {
     <EventTrigger>
       <Enabled>true</Enabled>
       <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="Security"&gt;&lt;Select Path="Security"&gt;*[System[EventID=$eventId]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
+    </EventTrigger>
+    <EventTrigger>
+      <Enabled>true</Enabled>
+      <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;&lt;Select Path="System"&gt;*[System[EventID=507]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
     </EventTrigger>
   </Triggers>
   <Actions Context="Author">
