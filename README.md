@@ -1,4 +1,4 @@
-# Security Cam
+# intruder_alert_system
 
 A lightweight Windows security tool written in Rust that silently captures a photo of anyone who enters the wrong password on your laptop and sends an email alert with the image attached.
 
@@ -39,7 +39,7 @@ release.exe → camera released → battery saved
 ## Project Structure
 
 ```
-security-cam/
+intruder_alert_system/
 │
 ├── Cargo.toml
 │
@@ -72,8 +72,8 @@ security-cam/
 ### 1. Clone the repository
 
 ```powershell
-git clone https://github.com/yourname/security-cam
-cd security-cam
+git clone https://github.com/yourname/intruder_alert_system
+cd intruder_alert_system
 ```
 
 ### 2. Configure email
@@ -134,19 +134,19 @@ Get-ScheduledTask | Where-Object { $_.TaskName -like "intruder_alert_system*" }
 ### Test manually
 ```powershell
 # Trigger capture directly
-..\intruder_alert_system\target\release\capture.exe
+intruder_alert_system\target\release\capture.exe
 
 # Check photo was saved
-Get-ChildItem "..\intruder_alert_system\captures"
+Get-ChildItem "intruder_alert_system\captures"
 
 # Check logs
-Get-Content "..\intruder_alert_system\logs\log.txt"
+Get-Content "intruder_alert_system\logs\log.txt"
 ```
 
 ### Test full flow
 ```powershell
 # Watch logs live
-Get-Content "..\intruder_alert_system\logs\log.txt" -Wait
+Get-Content "intruder_alert_system\logs\log.txt" -Wait
 ```
 1. Lock PC → `warm.exe` fires → camera warms up
 2. Enter wrong password → `capture.exe` fires → photo taken → email sent
