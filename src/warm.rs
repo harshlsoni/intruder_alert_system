@@ -12,7 +12,7 @@ use logger::log;
 const PORT:     u16  = 19876;
 const WIDTH:    u32  = 640;
 const HEIGHT:   u32  = 480;
-const SAVE_DIR: &str = "..\\intruder_alert_system\\captures";
+const SAVE_DIR: &str = "intruder_alert_system\\captures";
 
 fn main() {
     log("=== Lock screen detected ===");

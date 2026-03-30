@@ -57,7 +57,7 @@ fn direct_capture() {
 
     const WIDTH:    u32  = 640;
     const HEIGHT:   u32  = 480;
-    const SAVE_DIR: &str = "..\\intruder_alert_system\\captures";
+    const SAVE_DIR: &str = "intruder_alert_system\\captures";
 
     fs::create_dir_all(SAVE_DIR).ok();
 
