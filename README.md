@@ -1,99 +1,154 @@
+
 # intruder_alert_system
 
-A lightweight Windows security tool written in Rust that silently captures a photo of anyone who enters the wrong password on your laptop and sends an email alert with the image attached.
+A modular, multi-process Windows security system written in Rust that silently captures intruder images on failed login attempts, stores them, and sends email alerts — all with robust process isolation and scalable architecture.
 
 ---
 
-## How It Works
+##  System Architecture
+
+This project follows a **decoupled multi-process pipeline**, where each component is isolated and responsible for a single task.
 
 ```
-Lock screen appears (Event 4800)
-        ↓
-warm.exe launches → camera initializes silently
-        ↓
-Wrong password entered (Event 4625)
-        ↓
-capture.exe → camera already warm → instant photo
-        ↓
-Email alert sent via SMTP with photo attached
-        ↓
-PC unlocked (Event 4801)
-        ↓
-release.exe → camera released → battery saved
+
+capture.exe
+↓
+(temp storage)
+↓
+db_writer.exe
+↓
+MongoDB
+↓
+mailer.exe
+↓
+Email sent
+
+```
+
+This design ensures:
+- Better fault tolerance
+- Independent execution of critical components
+- Easier debugging and scalability
+
+---
+
+##  How It Works
+
+```
+
+Lock screen appears 
+↓
+warm.exe → camera initializes silently
+↓
+Wrong password entered 
+↓
+capture.exe → captures image → saves to temp
+↓
+db_writer.exe → stores image + metadata in MongoDB
+↓
+mailer.exe → fetches from DB → sends email alert
+↓
+PC unlocked 
+↓
+release.exe → camera released
+
 ```
 
 ---
 
-## Features
+##  Features
 
-- Silent background operation — no visible windows
-- Near-instant capture — camera pre-warmed on lock screen
-- Email alert with photo attached via SMTP
-- Fallback direct capture if PC was not locked first
-- Automatic logging to file
-- Battery friendly — camera only active during lock screen
-- Single `.exe` binaries — no runtime dependencies
+- Multi-process architecture (robust & scalable)
+- Silent background execution (no visible UI)
+- Near-instant capture using pre-warmed camera
+- MongoDB-based storage for images and metadata
+- Email alerts with image + timestamp
+- Decoupled pipeline (capture → DB → mail)
+- Centralized logging system (fixed absolute path)
+- Async execution using process spawning
+- Fault-tolerant design (supports retries/extensions)
+- Tray controller and dashboard UI support
 
 ---
 
-## Project Structure
+##  Project Structure
 
 ```
+
 intruder_alert_system/
 │
 ├── Cargo.toml
 │
 ├── src/
-│   ├── logger.rs        ← file + console logging
-│   ├── mailer.rs        ← SMTP email with attachment
-│   ├── warm.rs          ← opens camera on lock (Event 4800)
-│   ├── capture.rs       ← grabs photo on wrong password (Event 4625)
-│   └── release.rs       ← releases camera on unlock (Event 4801)
+│   ├── logger.rs         ← centralized logging (absolute path)
+│   ├── config.rs         ← configuration (paths, constants)
+│   ├── db.rs             ← MongoDB connection + schema
+│   │
+│   ├── warm.rs           ← initializes camera on lock
+│   ├── capture.rs        ← captures image + saves temp file
+│   ├── db_writer.rs      ← writes image + metadata to MongoDB
+│   ├── mailer.rs         ← fetches from DB and sends email
+│   ├── release.rs        ← releases camera on unlock
+│   │
+│   ├── controller.rs     ← system tray controller (toggle system)
+│   └── dashboard.rs      ← GUI to view intrusion attempts
 │
-├── trigger.ps1
-├── captures/            ← saved intruder photos
-└── logs/
-    └── log.txt          ← all events logged here
-```
+├── temp/                 ← temporary captured images
+├── logs/
+│   └── log.txt           ← centralized logs (absolute path)
+│
+├── trigger.ps1           ← registers scheduled tasks
+└── README.md
+
+````
 
 ---
 
-## Prerequisites
+##  Prerequisites
 
 - Windows 10 / 11
-- [Rust](https://rustup.rs) — `winget install Rustlang.Rustup`
-- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with **Desktop development with C++** workload
-- A Gmail account with **App Password** enabled
+- [Rust](https://rustup.rs)
+- Visual Studio Build Tools (C++ workload)
+- MongoDB (local or remote)
+- Gmail account with App Password enabled
 
 ---
 
-## Installation
+##  Installation
 
-### 1. Clone the repository
+### 1. Clone repository
 
 ```powershell
 git clone https://github.com/yourname/intruder_alert_system
 cd intruder_alert_system
-```
+````
 
-### 2. Configure email
+---
 
-Open `src/mailer.rs` and fill in your credentials:
+### 2. Configure environment
+
+####  Email (in `mailer.rs`)
 
 ```rust
 const SMTP_HOST: &str = "smtp.gmail.com";
 const SMTP_PORT: u16  = 587;
 const SMTP_USER: &str = "your_email@gmail.com";
-const SMTP_PASS: &str = "xxxx xxxx xxxx xxxx";  // Gmail App Password
+const SMTP_PASS: &str = "xxxx xxxx xxxx xxxx";
 const MAIL_FROM: &str = "your_email@gmail.com";
 const MAIL_TO:   &str = "your_email@gmail.com";
 ```
 
-> **Gmail App Password setup:**
-> 1. Go to [myaccount.google.com](https://myaccount.google.com)
-> 2. Security → 2-Step Verification → enable
-> 3. Security → App passwords → generate for "Mail"
-> 4. Paste the 16-character password into `SMTP_PASS`
+---
+
+####  MongoDB (in `config.rs` or `db.rs`)
+
+```rust
+const DB_URI: &str = "mongodb://localhost:27017";
+const DB_NAME: &str = "intruder_alert";
+const COLL_NAME: &str = "attempts";
+```
+
+---
 
 ### 3. Build
 
@@ -101,22 +156,27 @@ const MAIL_TO:   &str = "your_email@gmail.com";
 cargo build --release
 ```
 
-Produces three binaries in `target/release/`:
-- `warm.exe`
-- `capture.exe`
-- `release.exe`
+Generated binaries:
 
-### 4. Enable Windows Security Auditing
+* `warm.exe`
+* `capture.exe`
+* `db_writer.exe`
+* `mailer.exe`
+* `release.exe`
+* `controller.exe`
+* `dashboard.exe`
 
-Required for Event ID 4800 to fire:
+---
+
+### 4. Enable Windows Auditing
 
 ```powershell
 auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
 ```
 
-### 5. Register Task Scheduler tasks
+---
 
-Run as **Administrator**:
+### 5. Register Scheduled Tasks
 
 ```powershell
 ./trigger.ps1
@@ -124,100 +184,139 @@ Run as **Administrator**:
 
 ---
 
-## Testing
+##  Testing
 
-### Check tasks are registered
-```powershell
-Get-ScheduledTask | Where-Object { $_.TaskName -like "intruder_alert_system*" }
-```
-
-### Test manually
-```powershell
-# Trigger capture directly
-intruder_alert_system\target\release\capture.exe
-
-# Check photo was saved
-Get-ChildItem "intruder_alert_system\captures"
-
-# Check logs
-Get-Content "intruder_alert_system\logs\log.txt"
-```
-
-### Test full flow
-```powershell
-# Watch logs live
-Get-Content "intruder_alert_system\logs\log.txt" -Wait
-```
-1. Lock PC → `warm.exe` fires → camera warms up
-2. Enter wrong password → `capture.exe` fires → photo taken → email sent
-3. Unlock PC → `release.exe` fires → camera released
-
----
-
-## Task Management
+### Manual pipeline test
 
 ```powershell
-# Stop all tasks
-Stop-ScheduledTask  -TaskName "intruder_alert_system-Warm"
-Stop-ScheduledTask  -TaskName "intruder_alert_system-Capture"
-Stop-ScheduledTask  -TaskName "intruder_alert_system-Release"
+# Step 1: Capture image
+capture.exe
 
-# Disable all tasks
-Disable-ScheduledTask -TaskName "intruder_alert_system-Warm"
-Disable-ScheduledTask -TaskName "intruder_alert_system-Capture"
-Disable-ScheduledTask -TaskName "intruder_alert_system-Release"
+# Step 2: Write to DB
+db_writer.exe
 
-# Remove all tasks
-Unregister-ScheduledTask -TaskName "intruder_alert_system-Warm"    -Confirm:$false
-Unregister-ScheduledTask -TaskName "intruder_alert_system-Capture" -Confirm:$false
-Unregister-ScheduledTask -TaskName "intruder_alert_system-Release" -Confirm:$false
+# Step 3: Send email
+mailer.exe
 ```
 
 ---
 
-## Windows Event IDs Used
+### Live logs
 
-| Event ID | Meaning | Binary triggered |
-|---|---|---|
-| `4800` | Workstation locked | `warm.exe` |
-| `4625` | Failed login attempt | `capture.exe` |
-| `4801` | Workstation unlocked | `release.exe` |
+```powershell
+Get-Content "E:\security-cam_rust\logs\log.txt" -Wait
+```
 
 ---
 
-## Dependencies
+### Full system test
 
-| Crate | Version | Purpose |
-|---|---|---|
-| `escapi` | 4.0.0 | Windows camera capture |
-| `image` | 0.24 | JPEG encoding |
-| `lettre` | 0.11 | SMTP email |
-| `chrono` | 0.4 | Timestamps |
+1. Lock PC → `warm.exe`
+2. Enter wrong password → `capture.exe` → `db_writer.exe` → `mailer.exe`
+3. Unlock PC → `release.exe`
 
 ---
 
-## Troubleshooting
+##  UI Components
 
-**Camera not opening**
-- Check no other app is using the camera
-- Verify camera index `0` is correct — change in `warm.rs` if needed
+###  Controller (Tray App)
 
-**Email not sending**
-- Verify Gmail App Password is correct (not your regular password)
-- Make sure 2-Step Verification is enabled on your Google account
-- Check `logs/log.txt` for the exact error
+* Runs in background
+* Enables/disables system
+* Starts on system boot (via registry)
 
-**Task not firing**
-- Run `auditpol /get /subcategory:"Other Logon/Logoff Events"` — must not say `No Auditing`
-- Re-run the task registration script as Administrator
-- Check `DisallowStartIfOnBatteries` is set to `false`
+###  Dashboard
 
-**Console window flashing**
-- Make sure `#![windows_subsystem = "windows"]` is at the top of each `.rs` file
-- Rebuild with `cargo build --release`
+* Displays intrusion attempts
+* Fetches data from MongoDB
+* Shows captured images and metadata
 
 ---
 
-## License
+##  MongoDB Schema (Example)
+
+```json
+{
+  "_id": ObjectId,
+  "timestamp": "2026-04-03T18:30:00",
+  "image_path": "temp/img_123.jpg",
+  "emailed": true
+}
+```
+
+---
+
+##  Logging System
+
+* Uses **absolute path** to avoid multi-process conflicts
+* All executables write to:
+
+```
+...\intruder_alert_system\logs\log.txt
+```
+
+---
+
+##  Key Design Decisions
+
+* Decoupled processes instead of monolithic flow
+* Temporary storage before DB write
+* DB-driven email system (not direct send)
+* Independent lifecycle for critical components
+
+---
+
+##  Troubleshooting
+
+### Email not sending
+
+* Ensure Gmail App Password is correct
+* Check logs for SMTP errors
+* Ensure mailer process is not terminated early
+
+---
+
+### Logs missing
+
+* Ensure absolute log path is used
+* Verify all processes point to same file
+
+---
+
+### Camera issues
+
+* Ensure no other app is using camera
+* Verify correct camera index
+
+---
+
+### Tasks not triggering
+
+* Re-run `trigger.ps1` as Administrator
+* Verify auditing is enabled
+
+---
+
+### UI not working
+
+* Ensure correct working directory
+* Check if process is running in Task Manager
+
+---
+
+##  Future Enhancements
+
+* Retry queue for failed emails
+* Live log streaming in dashboard
+* CV-based intruder detection (AI integration)
+* Remote MongoDB (Atlas)
+* Windows service support
+* Installer package
+
+---
+
+##  License
 
 MIT
+
+```
