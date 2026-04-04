@@ -1,67 +1,173 @@
-#![windows_subsystem = "windows"]
+
 use lettre::{
     Message,
     SmtpTransport,
     Transport,
     transport::smtp::authentication::Credentials,
-    message::{header::ContentType, Attachment, MultiPart, SinglePart},
+    message::{header::ContentType,Mailbox, Attachment, MultiPart, SinglePart},
 };
-use std::fs;
-use crate::logger::log;
+use security_cam::config::load_env;
+use security_cam::logger::log;
+use security_cam::db;
+use bson::oid::ObjectId;
+use security_cam::env;
+use std::env as std_env;
+use once_cell::sync::Lazy;
 
 // ── Fill these in ─────────────────────────────────────────
 const SMTP_HOST:  &str = "smtp.gmail.com";
 const SMTP_PORT:  u16  = 587;
-const SMTP_USER:  &str = "";
-const SMTP_PASS:  &str = "";    
-const MAIL_FROM:  &str = "";
-const MAIL_TO:    &str = ""; // where to receive alert
+static SMTP_USER: Lazy<String> = Lazy::new(|| env::get("SMTP_USER"));
+static SMTP_PASS:  Lazy<String> =Lazy::new(|| env::get("SMTP_PASS"));
+static MAIL_FROM:  Lazy<String> = Lazy::new(|| env::get("MAIL_FROM"));
+static MAIL_TO:    Lazy<String> = Lazy::new(||env::get("MAIL_TO")); 
 // ──────────────────────────────────────────────────────────
 
-pub fn send_alert(filepath: &str) {
-    log("Sending email alert...");
+pub fn send_alert(id:ObjectId) {
+    log(" [MAIL] Entered send_alert()");
 
-    // Read image bytes
-    let img_bytes = match fs::read(filepath) {
-        Ok(b)  => b,
-        Err(e) => { log(&format!("ERROR reading image: {}", e)); return; }
+    log(" [MAIL] Fetching image from DB...");
+
+    
+
+    let attempt = match db::get_attempt_by_id(id) {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            log(" Attempt not found in DB");
+            return;
+        }
+        Err(e) => {
+            log(&format!(" DB fetch failed: {:?}", e));
+            return;
+        }
     };
 
-    // Build attachment
-    let attachment = Attachment::new("intruder.png".to_string())
-        .body(img_bytes, ContentType::parse("image/png").unwrap());
+    let timestamp = attempt.timestamp.clone();
+    let bytes = attempt.image.bytes.clone();
 
-    // Build email
+    log(&format!(" [MAIL] Image size: {} bytes", bytes.len()));
+
+
+    let from: Mailbox = match MAIL_FROM.parse() {
+        Ok(m) => m,
+        Err(e) => {
+            log(&format!(" Invalid FROM email: {:?}", e));
+            return;
+        }
+    };
+
+    let to: Mailbox = match MAIL_TO.parse() {
+        Ok(m) => m,
+        Err(e) => {
+            log(&format!(" Invalid TO email: {:?}", e));
+            return;
+        }
+    };
+
+    
+    log(" [MAIL] Building attachment...");
+
+    let content_type = match ContentType::parse("image/jpeg") {
+        Ok(ct) => ct,
+        Err(e) => {
+            log(&format!(" ContentType parse failed: {:?}", e));
+            return;
+        }
+    };
+
+    let attachment = Attachment::new("intruder.jpg".to_string())
+        .body(bytes.to_vec(), content_type);
+
+    
+    log(" [MAIL] Building email...");
+
+
+    let body = format!(
+        "SECURITY ALERT\n\n\
+        A failed login attempt was detected on your system.\n\n\
+        Time: {}\n\
+        Device: Your Laptop\n\n\
+        An image of the intruder is attached.\n\n\
+        Stay safe.",
+        timestamp
+    );
+
     let email = match Message::builder()
-        .from(MAIL_FROM.parse().unwrap())
-        .to(MAIL_TO.parse().unwrap())
+        .from(from)
+        .to(to)
         .subject("ALERT: Failed login attempt detected")
         .multipart(
             MultiPart::mixed()
                 .singlepart(
                     SinglePart::builder()
                         .header(ContentType::TEXT_PLAIN)
-                        .body(format!(
-                            "A failed login attempt was detected on your laptop.\n\nPhoto is attached.\n\nFile: {}",
-                            filepath
-                        ))
+                        .body(body)
                 )
                 .singlepart(attachment)
         ) {
-            Ok(e)  => e,
-            Err(e) => { log(&format!("ERROR building email: {}", e)); return; }
-        };
-
-    // Connect and send
-    let creds = Credentials::new(SMTP_USER.to_string(), SMTP_PASS.to_string());
-
-    let mailer = match SmtpTransport::starttls_relay(SMTP_HOST) {
-        Ok(m)  => m.port(SMTP_PORT).credentials(creds).build(),
-        Err(e) => { log(&format!("ERROR creating mailer: {}", e)); return; }
+        Ok(e) => {
+            log(" [MAIL] Email built");
+            e
+        }
+        Err(e) => {
+            log(&format!(" Email build failed: {:?}", e));
+            return;
+        }
     };
 
+    
+    log(" [MAIL] Setting credentials...");
+
+    let creds = Credentials::new(
+        SMTP_USER.to_string(),
+        SMTP_PASS.to_string()
+    );
+
+    log(" [MAIL] Creating SMTP transport...");
+
+    let mailer = match SmtpTransport::starttls_relay(SMTP_HOST) {
+        Ok(builder) => {
+            log(" SMTP relay OK");
+            builder.port(SMTP_PORT).credentials(creds).build()
+        }
+        Err(e) => {
+            log(&format!(" SMTP creation failed: {:?}", e));
+            return;
+        }
+    };
+
+    log(" [MAIL] Sending email...");
+
     match mailer.send(&email) {
-        Ok(_)  => log("Email sent successfully"),
-        Err(e) => log(&format!("ERROR sending email: {}", e)),
+        Ok(res) => {
+            log(&format!(" Email sent: {:?}", res));
+        }
+        Err(e) => {
+            log(&format!(" Send failed: {:?}", e));
+        }
     }
+
+    log(" [MAIL] Finished send_alert()");
+}
+
+
+
+fn main() {
+    load_env();
+    let args: Vec<String> = std_env::args().collect();
+
+    if args.len() < 2 {
+        log(" No ID provided to mailer");
+        return;
+    }
+
+    let id = match ObjectId::parse_str(&args[1]) {
+        Ok(id) => id,
+        Err(e) => {
+            log(&format!(" Invalid ObjectId: {:?}", e));
+            return;
+        }
+    };
+
+    send_alert(id);
 }

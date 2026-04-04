@@ -1,27 +1,31 @@
-#![windows_subsystem = "windows"]
-mod logger;
 
+use security_cam::logger;
 use std::net::TcpListener;
 use std::io::{Read, Write};
-use std::fs;
 use image::{ImageBuffer, Rgb};
 use image::codecs::jpeg::JpegEncoder;
-use chrono::Local;
 use logger::log;
+use security_cam::config;
+use security_cam::config::load_env;
 
 const PORT:     u16  = 19876;
 const WIDTH:    u32  = 640;
 const HEIGHT:   u32  = 480;
-const SAVE_DIR: &str = "intruder_alert_system\\captures";
 
 fn main() {
+    if !config::is_enabled() {
+        log("Tool is disabled — skipping capture.");
+        return;
+    }
+
+    load_env();
+
     log("=== Lock screen detected ===");
     log("Warming up camera...");
 
-    fs::create_dir_all(SAVE_DIR).ok();
 
-    // Open camera
-    let mut cam = match escapi::init(0, WIDTH, HEIGHT, 30) {
+    
+    let  cam = match escapi::init(0, WIDTH, HEIGHT, 30) {
         Ok(c)  => c,
         Err(e) => {
             log(&format!("ERROR opening camera: {:?}", e));
@@ -29,11 +33,11 @@ fn main() {
         }
     };
 
-    // Single warmup frame — gets camera ready
+    
     cam.capture().ok();
     log("Camera warm. Waiting for commands...");
 
-    // Bind TCP listener — waits for capture.exe or release.exe
+    
     let listener = match TcpListener::bind(format!("127.0.0.1:{}", PORT)) {
         Ok(l)  => l,
         Err(e) => {
@@ -42,7 +46,7 @@ fn main() {
         }
     };
 
-    // Wait for signals — uses 0% CPU while parked here
+    
     for stream in listener.incoming() {
         match stream {
             Ok(mut s) => {
@@ -65,59 +69,42 @@ fn main() {
                             }
                         };
 
-                        // BGRA → RGB conversion
+                        
                         let mut rgb = Vec::with_capacity(
                             (WIDTH * HEIGHT * 3) as usize
                         );
                         for chunk in data.chunks(4) {
-                            rgb.push(chunk[2]); // R
-                            rgb.push(chunk[1]); // G
-                            rgb.push(chunk[0]); // B
+                            rgb.push(chunk[2]); 
+                            rgb.push(chunk[1]); 
+                            rgb.push(chunk[0]); 
                         }
 
-                        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-                        let filepath  = format!(
-                            "{}\\intruder_{}.jpg",
-                            SAVE_DIR, timestamp
-                        );
-
-                        let saved = match ImageBuffer::<Rgb<u8>, _>
-                            ::from_raw(WIDTH, HEIGHT, rgb)
-                        {
-                            Some(img) => {
-                                match fs::File::create(&filepath) {
-                                    Ok(file) => {
-                                        let mut enc = JpegEncoder::new_with_quality(
-                                            std::io::BufWriter::new(file), 85
-                                        );
-                                        match enc.encode_image(&img) {
-                                            Ok(_)  => {
-                                                log(&format!("Photo saved: {}", filepath));
-                                                true
-                                            }
-                                            Err(e) => {
-                                                log(&format!("ERROR encoding: {}", e));
-                                                false
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        log(&format!("ERROR creating file: {}", e));
-                                        false
-                                    }
-                                }
-                            }
-                            None => {
-                                log("ERROR: Buffer build failed");
-                                false
-                            }
-                        };
-
-                        if saved {
-                            s.write_all(filepath.as_bytes()).ok();
-                        } else {
+                    
+                        
+                        let img = match ImageBuffer::<Rgb<u8>, _>::from_raw(WIDTH, HEIGHT, rgb) {
+                        Some(i) => i,
+                        None => {
+                            log("ERROR: Buffer build failed");
                             s.write_all(b"ERROR").ok();
+                            continue;
                         }
+                    };
+
+                   
+                    let mut jpeg_bytes = Vec::new();
+                    {
+                        let mut enc = JpegEncoder::new_with_quality(&mut jpeg_bytes, 85);
+                        if let Err(e) = enc.encode_image(&img) {
+                            log(&format!("ERROR encoding: {}", e));
+                            s.write_all(b"ERROR").ok();
+                            continue;
+                        }
+                    }
+
+                    log(&format!(" Captured image: {} bytes", jpeg_bytes.len()));
+
+                    
+                    s.write_all(&jpeg_bytes).ok();
                     }
 
                     "RELEASE" => {

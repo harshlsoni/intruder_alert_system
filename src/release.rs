@@ -1,6 +1,6 @@
-#![windows_subsystem = "windows"]
-mod logger;
 
+use security_cam::logger;
+use dotenv::dotenv;
 use std::net::TcpStream;
 use std::io::Write;
 use logger::log;
@@ -8,8 +8,9 @@ use logger::log;
 const PORT: u16 = 19876;
 
 fn main() {
-    log("=== PC unlocked ===");
+    dotenv().ok();
 
+    log("=== PC unlocked ===");
     match TcpStream::connect(format!("127.0.0.1:{}", PORT)) {
         Ok(mut s) => {
             s.write_all(b"RELEASE").ok();
