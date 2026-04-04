@@ -320,5 +320,3 @@ Get-Content ".\logs\log.txt" -Wait
 ## 📜 License
 
 MIT
-
-```
