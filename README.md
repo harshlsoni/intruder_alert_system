@@ -1,13 +1,13 @@
 
 # intruder_alert_system
 
-A modular, multi-process Windows security system written in Rust that silently captures intruder images on failed login attempts, stores them, and sends email alerts — powered by a decoupled, scalable architecture and centralized runtime configuration.
+A modular, multi-process Windows security system written in Rust that silently captures intruder images on failed login attempts, stores them, and sends email alerts with a toggle control panel.
 
 ---
 
 ##  System Architecture
 
-This project follows a **decoupled multi-process pipeline**, where each component is isolated and communicates via shared storage (temp + MongoDB).
+
 
 ```
 
@@ -24,15 +24,7 @@ mailer.exe
 Email sent
 
 ```
-
-###  Benefits
-
-- Fault-tolerant (failures don’t break entire system)
-- Scalable (each component evolves independently)
-- Debuggable (isolated execution)
-- Production-ready design
-
----
+
 
 ##  How It Works
 
